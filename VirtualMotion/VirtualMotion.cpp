@@ -11,6 +11,12 @@
 
 #define cRepeatON				(0x0001)
 #define IBM_EXTENDED_KEYBOARD	(4)
+#define MOUSE_EVENT_X(x)		((x) * (65535 / ::GetSystemMetrics(SM_CXSCREEN)))
+#define MOUSE_EVENT_Y(y)		((y) * (65535 / ::GetSystemMetrics(SM_CYSCREEN)))
+
+//typedef enum {
+//	NONE, LBUTTONDOWN, MBUTTONDOWN, RBUTTONDOWN,
+//} LAST_CLICK;
 
 static int g_isExtendedKey = -1;
 
@@ -18,6 +24,12 @@ static LPARAM MakeKeyEventLParam(BOOL bKeyUp, BOOL bPrevKeyState, BOOL bAltDown,
 static UINT VirtualKeyDownWithPostMessage(HWND hTargetWnd, UINT uVirtualKey);
 static UINT VirtualKeyDownWithSendInput(HWND hTargetWnd, UINT uVirtualKey);
 
+static void VMMouseButtonUp(HWND hTargetWnd,  BOOL bUsePostMessage, DWORD dwMouseEvent, const POINT* pos);
+static BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCount);
+static BOOL VMMouseDragWithSendInput(const VMMouseMessage* mouseMessage, int reduceCount);
+
+static void ActMouse(DWORD type);
+static void ActMoveMouse(int x, int y);
 
 /**
  * @brief
@@ -254,42 +266,28 @@ void WINAPI VMKeyUp(HWND hTargetWnd, UINT uKey)
  * キー押下->マウスクリック/MOVE/クリック解除->キーを離す。
  * 
  */
-BOOL WINAPI VMMouseDrag(const VMMouseMessage* mouseMessage)
+BOOL WINAPI VMMouseDrag(const VMMouseMessage* mouseMessage, int reduceCount)
 {
-	UINT mouseDownMessage;
-	UINT mouseButtonState;
-	UINT mouseUpMessage;
-	switch (mouseMessage->dragButton) {
-	case LButtonDrag:
-		mouseDownMessage = WM_LBUTTONDOWN;
-		mouseButtonState = MK_LBUTTON;
-		mouseUpMessage = WM_LBUTTONUP;
-		break;
-
-	case MButtonDrag:
-		mouseDownMessage = WM_MBUTTONDOWN;
-		mouseButtonState = MK_MBUTTON;
-		mouseUpMessage = WM_MBUTTONUP;
-		break;
-
-	case RButtonDrag:
-		mouseDownMessage = WM_RBUTTONDOWN;
-		mouseButtonState = MK_RBUTTON;
-		mouseUpMessage = WM_RBUTTONUP;
-		break;
-
-	default:
-		return FALSE;
+	if (reduceCount == 0) {
+		reduceCount = 1;
 	}
+	if (mouseMessage->bUsePostMessage) {
+		return VMMouseDragWithPostMessage(mouseMessage, reduceCount);
+	} else {
+		return VMMouseDragWithSendInput(mouseMessage, reduceCount);
+	}
+}
 
-	PostMessage(mouseMessage->hTargetWnd, mouseDownMessage,
-		mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y));
-	PostMessage(mouseMessage->hTargetWnd, WM_MOUSEMOVE,
-		mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
-	PostMessage(mouseMessage->hTargetWnd, mouseUpMessage,
-		(mouseUpMessage == WM_RBUTTONUP) ? mouseMessage->uKeyState : 0, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
-
-	return TRUE;
+void VMMouseButtonUp(HWND hTargetWnd, BOOL bUsePostMessage, DWORD dwMouseEvent, const POINT* pos) {
+	if (bUsePostMessage) {
+		PostMessage(hTargetWnd, dwMouseEvent, 0, MAKELPARAM(pos->x, pos->y));
+	} else {
+		INPUT input[] = {
+			{ INPUT_MOUSE, MOUSE_EVENT_X(pos->x), MOUSE_EVENT_Y(pos->y), 0, dwMouseEvent, 0, 0 },
+		};
+		SetFocus(hTargetWnd);
+		SendInput(1, input, sizeof(INPUT));
+	}
 }
 
 // bKeyUp: WM_SYSKEYUP/WM_KEYUPなら1
@@ -324,7 +322,7 @@ LPARAM MakeKeyEventLParam(BOOL bKeyUp, BOOL bPrevKeyState, BOOL bAltDown, USHORT
 	return lParam;
 }
 
-// キー入力ウィンドウとマウス入力ウィンドウが分かれている場合に効果的（RTT系など）
+// キー入力ウィンドウとマウス入力ウィンドウが分かれている場合など
 UINT VirtualKeyDownWithPostMessage(HWND hTargetWnd, UINT uVirtualKey)
 {
 	if (uVirtualKey == VK_MENU) {
@@ -335,7 +333,7 @@ UINT VirtualKeyDownWithPostMessage(HWND hTargetWnd, UINT uVirtualKey)
 	return 0;
 }
 
-// キー入力ウィンドウとマウス入力ウィンドウが同一の場合に効果的（Autodesk系など）
+// キー入力ウィンドウとマウス入力ウィンドウが同一の場合など
 UINT VirtualKeyDownWithSendInput(HWND hTargetWnd, UINT uVirtualKey)
 {
 	WORD wScan = (WORD)MapVirtualKey(uVirtualKey, 0);
@@ -345,7 +343,7 @@ UINT VirtualKeyDownWithSendInput(HWND hTargetWnd, UINT uVirtualKey)
 #endif
 	ULONG_PTR dwExtraInfo = GetMessageExtraInfo();
 
-	INPUT input[2];
+	INPUT input[1];
 	input[0].type			= INPUT_KEYBOARD;
 	input[0].ki.wVk			= (WORD)uVirtualKey;
 	input[0].ki.wScan		= wScan;
@@ -353,28 +351,417 @@ UINT VirtualKeyDownWithSendInput(HWND hTargetWnd, UINT uVirtualKey)
 	input[0].ki.time		= 0;
 	input[0].ki.dwExtraInfo	= dwExtraInfo;
 
-	input[1].type			= INPUT_KEYBOARD;
-	input[1].ki.wVk			= (WORD)uVirtualKey;
-	input[1].ki.wScan		= wScan;
-	input[1].ki.dwFlags		= dwFlags;
-	input[1].ki.time		= 0;
-	input[1].ki.dwExtraInfo	= dwExtraInfo;
-
-	//input[2].type			= INPUT_KEYBOARD;
-	//input[2].ki.wVk			= (WORD)uVirtualKey;
-	//input[2].ki.wScan		= wScan;
-	//input[2].ki.dwFlags		= dwFlags;
-	//input[2].ki.time		= 0;
-	//input[2].ki.dwExtraInfo	= dwExtraInfo;
-
-	//input[3].type			= INPUT_KEYBOARD;
-	//input[3].ki.wVk			= (WORD)uVirtualKey;
-	//input[3].ki.wScan		= wScan;
-	//input[3].ki.dwFlags		= dwFlags;
-	//input[3].ki.time		= 0;
-	//input[3].ki.dwExtraInfo	= dwExtraInfo;
-
 	SetFocus(hTargetWnd);
-
 	return SendInput(sizeof(input)/sizeof(input[0]), input, sizeof(input[0]));
+}
+
+//BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCount)
+//{
+//	UINT mouseDownMessage;
+//	UINT mouseButtonState;
+//	static UINT mouseUpMessage;
+//	static int counter = 0;
+//
+//	switch (mouseMessage->dragButton) {
+//	case LButtonDrag:
+//		if (g_lastClick != LBUTTONDOWN && g_lastClick != NONE) {
+//			PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(g_lastPos.x, g_lastPos.y));
+//			counter = 0;
+//		}
+//		g_lastClick = LBUTTONDOWN;
+//		mouseDownMessage = WM_LBUTTONDOWN;
+//		mouseButtonState = MK_LBUTTON;
+//		mouseUpMessage = WM_LBUTTONUP;
+//		break;
+//
+//	case MButtonDrag:
+//		if (g_lastClick != MBUTTONDOWN && g_lastClick != NONE) {
+//			PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(g_lastPos.x, g_lastPos.y));
+//			counter = 0;
+//		}
+//		g_lastClick = MBUTTONDOWN;
+//		mouseDownMessage = WM_MBUTTONDOWN;
+//		mouseButtonState = MK_MBUTTON;
+//		mouseUpMessage = WM_MBUTTONUP;
+//		break;
+//
+//	case RButtonDrag:
+//		if (g_lastClick != RBUTTONDOWN && g_lastClick != NONE) {
+//			PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(g_lastPos.x, g_lastPos.y));
+//			counter = 0;
+//		}
+//		g_lastClick = RBUTTONDOWN;
+//		mouseDownMessage = WM_RBUTTONDOWN;
+//		mouseButtonState = MK_RBUTTON;
+//		mouseUpMessage = WM_RBUTTONUP;
+//		break;
+//
+//	default:
+//		return FALSE;
+//	}
+//
+//	if (reduceCount == 1 || counter % reduceCount == 0) {	// reduceCount == 1を特別に記しているのは、処理速度アップのためです。
+//		PostMessage(mouseMessage->hTargetWnd, mouseDownMessage,
+//			mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y));
+//	}
+//	PostMessage(mouseMessage->hTargetWnd, WM_MOUSEMOVE,
+//		mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
+//	if (reduceCount == 1 || counter % reduceCount != 0) {
+//		PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
+//		g_lastClick = NONE;
+//	}
+//	counter++;
+//	g_lastPos.x = mouseMessage->dragEndPos.x;
+//	g_lastPos.y = mouseMessage->dragEndPos.y;
+//	return TRUE;
+//}
+
+//BOOL VMMouseDragWithSendInput(const VMMouseMessage* mouseMessage, int reduceCount)
+//{
+//	DWORD mouseDownMessage = 0;
+//	static DWORD mouseUpMessage = 0;
+//	static DWORD counter = 0;
+//
+//	switch (mouseMessage->dragButton) {
+//	case LButtonDrag:
+//		if (g_lastClick != LBUTTONDOWN && g_lastClick != NONE) {
+//			VMMouseButtonUp(mouseMessage->hTargetWnd, 0, mouseUpMessage, FALSE);
+//			counter = 0;
+//		}
+//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_MBUTTON, MOUSEEVENTF_MIDDLEUP, FALSE);
+//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_RBUTTON, MOUSEEVENTF_RIGHTUP, FALSE);
+//		mouseDownMessage = MOUSEEVENTF_LEFTDOWN;
+//		mouseUpMessage = MOUSEEVENTF_LEFTUP;
+//		g_lastClick = LBUTTONDOWN;
+//		break;
+//
+//	case MButtonDrag:
+//		if (g_lastClick != MBUTTONDOWN && g_lastClick != NONE) {
+//			VMMouseButtonUp(mouseMessage->hTargetWnd, 0, mouseUpMessage, FALSE);
+//			counter = 0;
+//		}
+//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_LBUTTON, MOUSEEVENTF_LEFTUP, FALSE);
+//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_RBUTTON, MOUSEEVENTF_RIGHTUP, FALSE);
+//		mouseDownMessage = MOUSEEVENTF_MIDDLEDOWN;
+//		mouseUpMessage = MOUSEEVENTF_MIDDLEUP;
+//		g_lastClick = MBUTTONDOWN;
+//		break;
+//
+//	case RButtonDrag:
+//		if (g_lastClick != RBUTTONDOWN && g_lastClick != NONE) {
+//			VMMouseButtonUp(mouseMessage->hTargetWnd, 0, mouseUpMessage, FALSE);
+//			counter = 0;
+//		}
+//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_LBUTTON, MOUSEEVENTF_LEFTUP, FALSE);
+//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_MBUTTON, MOUSEEVENTF_MIDDLEUP, FALSE);
+//		mouseDownMessage = MOUSEEVENTF_RIGHTDOWN;
+//		mouseUpMessage = MOUSEEVENTF_RIGHTUP;
+//		g_lastClick = RBUTTONDOWN;
+//		break;
+//
+//	default:
+//		return FALSE;
+//	}
+//
+//	//SetCursorPos(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y);
+//	INPUT input[] = {
+//		{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragStartPos.x), MOUSE_EVENT_Y(mouseMessage->dragStartPos.y), 0, MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE, 0, 0 },
+//		{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragStartPos.x), MOUSE_EVENT_Y(mouseMessage->dragStartPos.y), 0, mouseDownMessage, 0, 0 },
+//	    { INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragEndPos.x), MOUSE_EVENT_Y(mouseMessage->dragEndPos.y), 0, MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE, 0, 0 },
+//		{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragEndPos.x), MOUSE_EVENT_Y(mouseMessage->dragEndPos.y), 0, mouseUpMessage, 0, 0 },
+//	};
+//
+//	int inputCount = sizeof(input)/sizeof(input[0]);
+//	SetFocus(mouseMessage->hTargetWnd);
+//	if (reduceCount == 1 || counter % reduceCount != 0) {
+//		for (int i = 0; i < inputCount; i++) {
+//			SendInput(1, input+i, sizeof(INPUT));
+//			Sleep(0);
+//		}
+//	} else {
+//		for (int i = 0; i < inputCount-1; i++) {
+//			SendInput(1, input+i, sizeof(INPUT));
+//			Sleep(0);
+//		}
+//	}
+//	counter++;
+//	g_lastPos.x = mouseMessage->dragEndPos.x;
+//	g_lastPos.y = mouseMessage->dragEndPos.y;	
+//	return TRUE;
+//}
+
+void WINAPI VMMouseClick(const VMMouseMessage* mouseMessage, BOOL release) {
+	static DWORD mouseDownMessage = 0;
+	static DWORD mouseUpMessage = 0;
+	static HWND lastTargetWnd = NULL;
+	static BOOL bLastUsePostMessage = FALSE;
+
+	if (release) {
+		if (mouseDownMessage != 0) {
+			VMMouseButtonUp(lastTargetWnd, bLastUsePostMessage, mouseUpMessage, &mouseMessage->dragEndPos);
+			{
+				TCHAR szBuf[128];
+				_stprintf_s(szBuf, 128, _T("VMMouseButtonUp(%x, %d, %x, x=%d, y=%d);\n"), lastTargetWnd, bLastUsePostMessage, mouseUpMessage, mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y);
+				OutputDebugString(szBuf);
+			}
+			mouseDownMessage = 0;
+			mouseUpMessage = 0;
+			lastTargetWnd = NULL;
+			bLastUsePostMessage = FALSE;
+		}
+		return;
+	}
+
+	if (mouseMessage->bUsePostMessage) {
+		switch (mouseMessage->dragButton) {
+		case LButtonDrag:
+			mouseDownMessage = WM_LBUTTONDOWN;
+			mouseUpMessage = WM_LBUTTONUP;
+			break;
+		case MButtonDrag:
+			mouseDownMessage = WM_MBUTTONDOWN;
+			mouseUpMessage = WM_MBUTTONUP;
+			break;
+		case RButtonDrag:
+			mouseDownMessage = WM_RBUTTONDOWN;
+			mouseUpMessage = WM_RBUTTONUP;
+			break;
+		}
+		PostMessage(mouseMessage->hTargetWnd, mouseDownMessage, mouseMessage->uKeyState, MAKELPARAM(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y));
+	} else {
+		switch (mouseMessage->dragButton) {
+		case LButtonDrag:
+			mouseDownMessage = MOUSEEVENTF_LEFTDOWN;
+			mouseUpMessage = MOUSEEVENTF_LEFTUP;
+			break;
+		case MButtonDrag:
+			mouseDownMessage = MOUSEEVENTF_MIDDLEDOWN;
+			mouseUpMessage = MOUSEEVENTF_MIDDLEUP;
+			break;
+		case RButtonDrag:
+			mouseDownMessage = MOUSEEVENTF_RIGHTDOWN;
+			mouseUpMessage = MOUSEEVENTF_RIGHTUP;
+			break;
+		}
+		ActMoveMouse(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y);
+		ActMouse(mouseDownMessage);
+	}
+	lastTargetWnd = mouseMessage->hTargetWnd;
+	bLastUsePostMessage = mouseMessage->bUsePostMessage;
+}
+
+void WINAPI VMMouseMove(const VMMouseMessage* mouseMessage/*, int reduceCount*/) {
+	if (mouseMessage->bUsePostMessage) {
+		{
+			TCHAR szBuf[64];
+			_stprintf_s(szBuf, 64, _T("0x%x\n"), mouseMessage->uKeyState);
+			OutputDebugString(szBuf);
+		}
+		PostMessage(mouseMessage->hTargetWnd, WM_MOUSEMOVE, mouseMessage->uKeyState, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
+	} else {
+		ActMoveMouse(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y);
+	}
+}
+
+BOOL WINAPI VMMouseEvent(const VMMouseMessage* mouseMessage, int reduceCount, BOOL resetPostMessage, BOOL resetSendInput) {
+	if (resetPostMessage) {
+		VMMouseDragWithPostMessage(NULL, 0);
+		return TRUE;
+	}
+	if (resetSendInput) {
+		VMMouseDragWithSendInput(NULL, 0);
+		return TRUE;
+	}
+
+	if (reduceCount == 0) {
+		reduceCount = 1;
+	}
+	if (mouseMessage->bUsePostMessage) {
+		return VMMouseDragWithPostMessage(mouseMessage, reduceCount);
+	} else {
+		return VMMouseDragWithSendInput(mouseMessage, reduceCount);
+	}
+}
+
+BOOL VMMouseDragWithSendInput(const VMMouseMessage* mouseMessage, int reduceCount)
+{
+	static DWORD mouseDownMessage = 0;
+	static DWORD mouseUpMessage = 0;
+	static DWORD counter = 0;
+
+	static VMMouseMessage lastMouseMessage = {0};
+
+	if (mouseMessage == NULL) {	// reset
+		if (mouseDownMessage != 0) {
+			VMMouseButtonUp(lastMouseMessage.hTargetWnd, FALSE, mouseUpMessage, &lastMouseMessage.dragEndPos);
+		}
+		mouseDownMessage = 0;
+		mouseUpMessage = 0;
+		counter = 0;
+		return TRUE;
+	}
+
+	// 保存
+	CopyMemory(&lastMouseMessage, mouseMessage, sizeof(VMMouseMessage));
+	
+	switch (mouseMessage->dragButton) {
+	case LButtonDrag:
+		if (mouseDownMessage != MOUSEEVENTF_LEFTDOWN && mouseDownMessage != 0) {
+			VMMouseButtonUp(lastMouseMessage.hTargetWnd, FALSE, mouseUpMessage, &lastMouseMessage.dragEndPos);
+			counter = 0;
+		}
+		mouseDownMessage = MOUSEEVENTF_LEFTDOWN;
+		mouseUpMessage = MOUSEEVENTF_LEFTUP;
+		break;
+
+	case MButtonDrag:
+		if (mouseDownMessage != MOUSEEVENTF_MIDDLEDOWN && mouseDownMessage != 0) {
+			VMMouseButtonUp(lastMouseMessage.hTargetWnd, FALSE, mouseUpMessage, &lastMouseMessage.dragEndPos);
+			counter = 0;
+		}
+		mouseDownMessage = MOUSEEVENTF_MIDDLEDOWN;
+		mouseUpMessage = MOUSEEVENTF_MIDDLEUP;
+		break;
+
+	case RButtonDrag:
+		if (mouseDownMessage != MOUSEEVENTF_RIGHTDOWN && mouseDownMessage != 0) {
+			VMMouseButtonUp(lastMouseMessage.hTargetWnd, FALSE, mouseUpMessage, &lastMouseMessage.dragEndPos);
+			counter = 0;
+		}
+		mouseDownMessage = MOUSEEVENTF_RIGHTDOWN;
+		mouseUpMessage = MOUSEEVENTF_RIGHTUP;
+		break;
+
+	default:
+		return FALSE;
+	}
+
+	SetFocus(mouseMessage->hTargetWnd);
+
+	ActMoveMouse(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y);
+	ActMouse(mouseDownMessage);
+	ActMoveMouse(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y);
+	if (reduceCount == 1 || counter % reduceCount != 0) {
+		ActMouse(mouseUpMessage);
+		mouseDownMessage = 0;
+	}
+
+	//INPUT input[] = {
+	//	{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragStartPos.x), MOUSE_EVENT_Y(mouseMessage->dragStartPos.y), 0, MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE, 0, 0 },
+	//	{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragStartPos.x), MOUSE_EVENT_Y(mouseMessage->dragStartPos.y), 0, mouseDownMessage, 0, 0 },
+	//    { INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragEndPos.x), MOUSE_EVENT_Y(mouseMessage->dragEndPos.y), 0, MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE, 0, 0 },
+	//	{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragEndPos.x), MOUSE_EVENT_Y(mouseMessage->dragEndPos.y), 0, mouseUpMessage, 0, 0 },
+	//};
+
+	//int inputCount = sizeof(input)/sizeof(input[0]);
+	//SetFocus(mouseMessage->hTargetWnd);
+	//if (reduceCount == 1 || counter % reduceCount != 0) {
+	//	for (int i = 0; i < inputCount; i++) {
+	//		SendInput(1, input+i, sizeof(INPUT));
+	//		Sleep(0);
+	//	}
+	//} else {
+	//	for (int i = 0; i < inputCount-1; i++) {
+	//		SendInput(1, input+i, sizeof(INPUT));
+	//		Sleep(0);
+	//	}
+	//}
+	counter++;
+	return TRUE;
+}
+
+BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCount)
+{
+	static DWORD mouseDownMessage = 0;
+	static DWORD mouseUpMessage = 0;
+	static DWORD counter = 0;
+	UINT mouseButtonState;
+
+	static VMMouseMessage lastMouseMessage = {0};
+
+	if (mouseMessage == NULL) {	// reset
+		if (mouseDownMessage != 0) {
+			VMMouseButtonUp(lastMouseMessage.hTargetWnd, TRUE, mouseUpMessage, &lastMouseMessage.dragEndPos);
+		}
+		mouseDownMessage = 0;
+		mouseUpMessage = 0;
+		counter = 0;
+		return TRUE;
+	}
+
+	// 保存
+	CopyMemory(&lastMouseMessage, mouseMessage, sizeof(VMMouseMessage));
+
+	switch (mouseMessage->dragButton) {
+	case LButtonDrag:
+		if (mouseDownMessage != WM_LBUTTONDOWN && mouseDownMessage != 0) {
+			VMMouseButtonUp(lastMouseMessage.hTargetWnd, TRUE, mouseUpMessage, &lastMouseMessage.dragEndPos);
+			counter = 0;
+		}
+		mouseDownMessage = WM_LBUTTONDOWN;
+		mouseButtonState = MK_LBUTTON;
+		mouseUpMessage = WM_LBUTTONUP;
+		break;
+
+	case MButtonDrag:
+		if (mouseDownMessage != WM_MBUTTONDOWN && mouseDownMessage != 0) {
+			VMMouseButtonUp(lastMouseMessage.hTargetWnd, TRUE, mouseUpMessage, &lastMouseMessage.dragEndPos);
+			counter = 0;
+		}
+		mouseDownMessage = WM_MBUTTONDOWN;
+		mouseButtonState = MK_MBUTTON;
+		mouseUpMessage = WM_MBUTTONUP;
+		break;
+
+	case RButtonDrag:
+		if (mouseDownMessage != WM_RBUTTONDOWN && mouseDownMessage != 0) {
+			VMMouseButtonUp(lastMouseMessage.hTargetWnd, TRUE, mouseUpMessage, &lastMouseMessage.dragEndPos);
+			counter = 0;
+		}
+		mouseDownMessage = WM_RBUTTONDOWN;
+		mouseButtonState = MK_RBUTTON;
+		mouseUpMessage = WM_RBUTTONUP;
+		break;
+
+	default:
+		return FALSE;
+	}
+
+	if (reduceCount == 1 || counter % reduceCount == 0) {	// reduceCount == 1を特別に記しているのは、処理速度アップのためです。
+		PostMessage(mouseMessage->hTargetWnd, mouseDownMessage,
+			mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y));
+	}
+	PostMessage(mouseMessage->hTargetWnd, WM_MOUSEMOVE,
+		mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
+	if (reduceCount == 1 || counter % reduceCount != 0) {
+		PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
+		mouseDownMessage = 0;
+	}
+	counter++;
+	return TRUE;
+}
+
+
+void ActMouse(DWORD type) {
+	INPUT input[1] = {0};
+	MOUSEINPUT mi[1] = {0};
+
+	mi[0].dwFlags = type;
+	input[0].type = INPUT_MOUSE;
+	input[0].mi = mi[0];
+	SendInput(1, input, sizeof(INPUT));
+	Sleep(0);
+}
+
+void ActMoveMouse(int x, int y) {
+	INPUT input[1] = {0};
+	MOUSEINPUT mi[1] = {0};
+
+	mi[0].dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+	mi[0].dx = MOUSE_EVENT_X(x);
+	mi[0].dy = MOUSE_EVENT_Y(y);
+	input[0].type = INPUT_MOUSE;
+	input[0].mi = mi[0];
+	SendInput(1, input, sizeof(INPUT));
+	Sleep(0);
 }

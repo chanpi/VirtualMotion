@@ -4,7 +4,11 @@
 #pragma comment(linker, "/export:VMGetVirtualKey=_VMGetVirtualKey@4")
 #pragma comment(linker, "/export:VMKeyDown=_VMKeyDown@12")
 #pragma comment(linker, "/export:VMKeyUp=_VMKeyUp@8")
-#pragma comment(linker, "/export:VMMouseDrag=_VMMouseDrag@4")
+//#pragma comment(linker, "/export:VMMouseButtonUp=_VMMouseButtonUp@16")
+#pragma comment(linker, "/export:VMMouseDrag=_VMMouseDrag@8")
+#pragma comment(linker, "/export:VMMouseClick=_VMMouseClick@8")
+#pragma comment(linker, "/export:VMMouseMove=_VMMouseMove@4")
+//#pragma comment(linker, "/export:VMMouseEvent=_VMMouseEvent@16")
 #pragma comment(linker, "/export:VMVirtualKeyDown=_VMVirtualKeyDown@12")
 #pragma comment(linker, "/export:VMVirtualKeyUp=_VMVirtualKeyUp@8")
 
@@ -21,9 +25,11 @@ typedef enum {
 	LButtonDrag,
 	MButtonDrag,
 	RButtonDrag,
+	DragNONE,
 } VMDragButton;
 
 typedef struct {
+	BOOL bUsePostMessage;
 	HWND hTargetWnd;
 	VMDragButton dragButton;
 	UINT uKeyState;
@@ -49,8 +55,14 @@ extern "C" {
 	DLL_EXPORT void WINAPI VMKeyDown(HWND hTargetWnd, UINT uKey, DWORD dwMilliseconds);
 	DLL_EXPORT void WINAPI VMKeyUp(HWND hTargetWnd, UINT uKey);
 	
+	// マウスクリック
+	DLL_EXPORT void WINAPI VMMouseClick(const VMMouseMessage* mouseMessage, BOOL release);
+	DLL_EXPORT void WINAPI VMMouseMove(const VMMouseMessage* mouseMessage/*, int reduceCount*/);
 	// マウスドラッグ
-	DLL_EXPORT BOOL WINAPI VMMouseDrag(const VMMouseMessage* mouseMessage);
+	//DLL_EXPORT BOOL WINAPI VMMouseEvent(const VMMouseMessage* mouseMessage, int reduceCount, BOOL resetPostMessage, BOOL resetSendInput);
+	DLL_EXPORT BOOL WINAPI VMMouseDrag(const VMMouseMessage* mouseMessage, int reduceCount = 1);
+	//DLL_EXPORT void WINAPI VMMouseButtonUp(HWND hTargetWnd, SHORT key = 0, DWORD dwMouseEvent = 0, BOOL bUsePostMessage = TRUE);
+	//DLL_EXPORT void WINAPI VMMouseButtonUp(HWND hTargetWnd,  BOOL bUsePostMessage, DWORD dwMouseEvent, PPOINT pos);
 
 #ifdef __cplusplus
 }
