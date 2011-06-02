@@ -61,8 +61,6 @@ extern "C" {
 	// マウスドラッグ
 	//DLL_EXPORT BOOL WINAPI VMMouseEvent(const VMMouseMessage* mouseMessage, int reduceCount, BOOL resetPostMessage, BOOL resetSendInput);
 	DLL_EXPORT BOOL WINAPI VMMouseDrag(const VMMouseMessage* mouseMessage, int reduceCount = 1);
-	//DLL_EXPORT void WINAPI VMMouseButtonUp(HWND hTargetWnd, SHORT key = 0, DWORD dwMouseEvent = 0, BOOL bUsePostMessage = TRUE);
-	//DLL_EXPORT void WINAPI VMMouseButtonUp(HWND hTargetWnd,  BOOL bUsePostMessage, DWORD dwMouseEvent, PPOINT pos);
 
 #ifdef __cplusplus
 }

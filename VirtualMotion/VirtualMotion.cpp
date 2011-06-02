@@ -14,10 +14,6 @@
 #define MOUSE_EVENT_X(x)		((x) * (65535 / ::GetSystemMetrics(SM_CXSCREEN)))
 #define MOUSE_EVENT_Y(y)		((y) * (65535 / ::GetSystemMetrics(SM_CYSCREEN)))
 
-//typedef enum {
-//	NONE, LBUTTONDOWN, MBUTTONDOWN, RBUTTONDOWN,
-//} LAST_CLICK;
-
 static int g_isExtendedKey = -1;
 
 static LPARAM MakeKeyEventLParam(BOOL bKeyUp, BOOL bPrevKeyState, BOOL bAltDown, USHORT uVirtualKey);
@@ -355,140 +351,6 @@ UINT VirtualKeyDownWithSendInput(HWND hTargetWnd, UINT uVirtualKey)
 	return SendInput(sizeof(input)/sizeof(input[0]), input, sizeof(input[0]));
 }
 
-//BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCount)
-//{
-//	UINT mouseDownMessage;
-//	UINT mouseButtonState;
-//	static UINT mouseUpMessage;
-//	static int counter = 0;
-//
-//	switch (mouseMessage->dragButton) {
-//	case LButtonDrag:
-//		if (g_lastClick != LBUTTONDOWN && g_lastClick != NONE) {
-//			PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(g_lastPos.x, g_lastPos.y));
-//			counter = 0;
-//		}
-//		g_lastClick = LBUTTONDOWN;
-//		mouseDownMessage = WM_LBUTTONDOWN;
-//		mouseButtonState = MK_LBUTTON;
-//		mouseUpMessage = WM_LBUTTONUP;
-//		break;
-//
-//	case MButtonDrag:
-//		if (g_lastClick != MBUTTONDOWN && g_lastClick != NONE) {
-//			PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(g_lastPos.x, g_lastPos.y));
-//			counter = 0;
-//		}
-//		g_lastClick = MBUTTONDOWN;
-//		mouseDownMessage = WM_MBUTTONDOWN;
-//		mouseButtonState = MK_MBUTTON;
-//		mouseUpMessage = WM_MBUTTONUP;
-//		break;
-//
-//	case RButtonDrag:
-//		if (g_lastClick != RBUTTONDOWN && g_lastClick != NONE) {
-//			PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(g_lastPos.x, g_lastPos.y));
-//			counter = 0;
-//		}
-//		g_lastClick = RBUTTONDOWN;
-//		mouseDownMessage = WM_RBUTTONDOWN;
-//		mouseButtonState = MK_RBUTTON;
-//		mouseUpMessage = WM_RBUTTONUP;
-//		break;
-//
-//	default:
-//		return FALSE;
-//	}
-//
-//	if (reduceCount == 1 || counter % reduceCount == 0) {	// reduceCount == 1を特別に記しているのは、処理速度アップのためです。
-//		PostMessage(mouseMessage->hTargetWnd, mouseDownMessage,
-//			mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y));
-//	}
-//	PostMessage(mouseMessage->hTargetWnd, WM_MOUSEMOVE,
-//		mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
-//	if (reduceCount == 1 || counter % reduceCount != 0) {
-//		PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
-//		g_lastClick = NONE;
-//	}
-//	counter++;
-//	g_lastPos.x = mouseMessage->dragEndPos.x;
-//	g_lastPos.y = mouseMessage->dragEndPos.y;
-//	return TRUE;
-//}
-
-//BOOL VMMouseDragWithSendInput(const VMMouseMessage* mouseMessage, int reduceCount)
-//{
-//	DWORD mouseDownMessage = 0;
-//	static DWORD mouseUpMessage = 0;
-//	static DWORD counter = 0;
-//
-//	switch (mouseMessage->dragButton) {
-//	case LButtonDrag:
-//		if (g_lastClick != LBUTTONDOWN && g_lastClick != NONE) {
-//			VMMouseButtonUp(mouseMessage->hTargetWnd, 0, mouseUpMessage, FALSE);
-//			counter = 0;
-//		}
-//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_MBUTTON, MOUSEEVENTF_MIDDLEUP, FALSE);
-//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_RBUTTON, MOUSEEVENTF_RIGHTUP, FALSE);
-//		mouseDownMessage = MOUSEEVENTF_LEFTDOWN;
-//		mouseUpMessage = MOUSEEVENTF_LEFTUP;
-//		g_lastClick = LBUTTONDOWN;
-//		break;
-//
-//	case MButtonDrag:
-//		if (g_lastClick != MBUTTONDOWN && g_lastClick != NONE) {
-//			VMMouseButtonUp(mouseMessage->hTargetWnd, 0, mouseUpMessage, FALSE);
-//			counter = 0;
-//		}
-//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_LBUTTON, MOUSEEVENTF_LEFTUP, FALSE);
-//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_RBUTTON, MOUSEEVENTF_RIGHTUP, FALSE);
-//		mouseDownMessage = MOUSEEVENTF_MIDDLEDOWN;
-//		mouseUpMessage = MOUSEEVENTF_MIDDLEUP;
-//		g_lastClick = MBUTTONDOWN;
-//		break;
-//
-//	case RButtonDrag:
-//		if (g_lastClick != RBUTTONDOWN && g_lastClick != NONE) {
-//			VMMouseButtonUp(mouseMessage->hTargetWnd, 0, mouseUpMessage, FALSE);
-//			counter = 0;
-//		}
-//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_LBUTTON, MOUSEEVENTF_LEFTUP, FALSE);
-//		//VMMouseButtonUp(mouseMessage->hTargetWnd, MK_MBUTTON, MOUSEEVENTF_MIDDLEUP, FALSE);
-//		mouseDownMessage = MOUSEEVENTF_RIGHTDOWN;
-//		mouseUpMessage = MOUSEEVENTF_RIGHTUP;
-//		g_lastClick = RBUTTONDOWN;
-//		break;
-//
-//	default:
-//		return FALSE;
-//	}
-//
-//	//SetCursorPos(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y);
-//	INPUT input[] = {
-//		{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragStartPos.x), MOUSE_EVENT_Y(mouseMessage->dragStartPos.y), 0, MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE, 0, 0 },
-//		{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragStartPos.x), MOUSE_EVENT_Y(mouseMessage->dragStartPos.y), 0, mouseDownMessage, 0, 0 },
-//	    { INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragEndPos.x), MOUSE_EVENT_Y(mouseMessage->dragEndPos.y), 0, MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE, 0, 0 },
-//		{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragEndPos.x), MOUSE_EVENT_Y(mouseMessage->dragEndPos.y), 0, mouseUpMessage, 0, 0 },
-//	};
-//
-//	int inputCount = sizeof(input)/sizeof(input[0]);
-//	SetFocus(mouseMessage->hTargetWnd);
-//	if (reduceCount == 1 || counter % reduceCount != 0) {
-//		for (int i = 0; i < inputCount; i++) {
-//			SendInput(1, input+i, sizeof(INPUT));
-//			Sleep(0);
-//		}
-//	} else {
-//		for (int i = 0; i < inputCount-1; i++) {
-//			SendInput(1, input+i, sizeof(INPUT));
-//			Sleep(0);
-//		}
-//	}
-//	counter++;
-//	g_lastPos.x = mouseMessage->dragEndPos.x;
-//	g_lastPos.y = mouseMessage->dragEndPos.y;	
-//	return TRUE;
-//}
 
 void WINAPI VMMouseClick(const VMMouseMessage* mouseMessage, BOOL release) {
 	static DWORD mouseDownMessage = 0;
@@ -499,11 +361,6 @@ void WINAPI VMMouseClick(const VMMouseMessage* mouseMessage, BOOL release) {
 	if (release) {
 		if (mouseDownMessage != 0) {
 			VMMouseButtonUp(lastTargetWnd, bLastUsePostMessage, mouseUpMessage, &mouseMessage->dragEndPos);
-			{
-				TCHAR szBuf[128];
-				_stprintf_s(szBuf, 128, _T("VMMouseButtonUp(%x, %d, %x, x=%d, y=%d);\n"), lastTargetWnd, bLastUsePostMessage, mouseUpMessage, mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y);
-				OutputDebugString(szBuf);
-			}
 			mouseDownMessage = 0;
 			mouseUpMessage = 0;
 			lastTargetWnd = NULL;
@@ -552,11 +409,6 @@ void WINAPI VMMouseClick(const VMMouseMessage* mouseMessage, BOOL release) {
 
 void WINAPI VMMouseMove(const VMMouseMessage* mouseMessage/*, int reduceCount*/) {
 	if (mouseMessage->bUsePostMessage) {
-		{
-			TCHAR szBuf[64];
-			_stprintf_s(szBuf, 64, _T("0x%x\n"), mouseMessage->uKeyState);
-			OutputDebugString(szBuf);
-		}
 		PostMessage(mouseMessage->hTargetWnd, WM_MOUSEMOVE, mouseMessage->uKeyState, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
 	} else {
 		ActMoveMouse(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y);
