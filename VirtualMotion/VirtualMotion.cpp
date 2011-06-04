@@ -415,26 +415,6 @@ void WINAPI VMMouseMove(const VMMouseMessage* mouseMessage/*, int reduceCount*/)
 	}
 }
 
-BOOL WINAPI VMMouseEvent(const VMMouseMessage* mouseMessage, int reduceCount, BOOL resetPostMessage, BOOL resetSendInput) {
-	if (resetPostMessage) {
-		VMMouseDragWithPostMessage(NULL, 0);
-		return TRUE;
-	}
-	if (resetSendInput) {
-		VMMouseDragWithSendInput(NULL, 0);
-		return TRUE;
-	}
-
-	if (reduceCount == 0) {
-		reduceCount = 1;
-	}
-	if (mouseMessage->bUsePostMessage) {
-		return VMMouseDragWithPostMessage(mouseMessage, reduceCount);
-	} else {
-		return VMMouseDragWithSendInput(mouseMessage, reduceCount);
-	}
-}
-
 BOOL VMMouseDragWithSendInput(const VMMouseMessage* mouseMessage, int reduceCount)
 {
 	static DWORD mouseDownMessage = 0;
@@ -498,26 +478,6 @@ BOOL VMMouseDragWithSendInput(const VMMouseMessage* mouseMessage, int reduceCoun
 		mouseDownMessage = 0;
 	}
 
-	//INPUT input[] = {
-	//	{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragStartPos.x), MOUSE_EVENT_Y(mouseMessage->dragStartPos.y), 0, MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE, 0, 0 },
-	//	{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragStartPos.x), MOUSE_EVENT_Y(mouseMessage->dragStartPos.y), 0, mouseDownMessage, 0, 0 },
-	//    { INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragEndPos.x), MOUSE_EVENT_Y(mouseMessage->dragEndPos.y), 0, MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE, 0, 0 },
-	//	{ INPUT_MOUSE, MOUSE_EVENT_X(mouseMessage->dragEndPos.x), MOUSE_EVENT_Y(mouseMessage->dragEndPos.y), 0, mouseUpMessage, 0, 0 },
-	//};
-
-	//int inputCount = sizeof(input)/sizeof(input[0]);
-	//SetFocus(mouseMessage->hTargetWnd);
-	//if (reduceCount == 1 || counter % reduceCount != 0) {
-	//	for (int i = 0; i < inputCount; i++) {
-	//		SendInput(1, input+i, sizeof(INPUT));
-	//		Sleep(0);
-	//	}
-	//} else {
-	//	for (int i = 0; i < inputCount-1; i++) {
-	//		SendInput(1, input+i, sizeof(INPUT));
-	//		Sleep(0);
-	//	}
-	//}
 	counter++;
 	return TRUE;
 }
@@ -527,7 +487,6 @@ BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCo
 	static DWORD mouseDownMessage = 0;
 	static DWORD mouseUpMessage = 0;
 	static DWORD counter = 0;
-	UINT mouseButtonState;
 
 	static VMMouseMessage lastMouseMessage = {0};
 
@@ -551,7 +510,6 @@ BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCo
 			counter = 0;
 		}
 		mouseDownMessage = WM_LBUTTONDOWN;
-		mouseButtonState = MK_LBUTTON;
 		mouseUpMessage = WM_LBUTTONUP;
 		break;
 
@@ -561,7 +519,6 @@ BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCo
 			counter = 0;
 		}
 		mouseDownMessage = WM_MBUTTONDOWN;
-		mouseButtonState = MK_MBUTTON;
 		mouseUpMessage = WM_MBUTTONUP;
 		break;
 
@@ -571,7 +528,6 @@ BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCo
 			counter = 0;
 		}
 		mouseDownMessage = WM_RBUTTONDOWN;
-		mouseButtonState = MK_RBUTTON;
 		mouseUpMessage = WM_RBUTTONUP;
 		break;
 
@@ -581,10 +537,10 @@ BOOL VMMouseDragWithPostMessage(const VMMouseMessage* mouseMessage, int reduceCo
 
 	if (reduceCount == 1 || counter % reduceCount == 0) {	// reduceCount == 1を特別に記しているのは、処理速度アップのためです。
 		PostMessage(mouseMessage->hTargetWnd, mouseDownMessage,
-			mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y));
+			mouseMessage->uKeyState, MAKELPARAM(mouseMessage->dragStartPos.x, mouseMessage->dragStartPos.y));
 	}
 	PostMessage(mouseMessage->hTargetWnd, WM_MOUSEMOVE,
-		mouseMessage->uKeyState | mouseButtonState, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
+		mouseMessage->uKeyState, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
 	if (reduceCount == 1 || counter % reduceCount != 0) {
 		PostMessage(mouseMessage->hTargetWnd, mouseUpMessage, 0, MAKELPARAM(mouseMessage->dragEndPos.x, mouseMessage->dragEndPos.y));
 		mouseDownMessage = 0;
