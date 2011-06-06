@@ -4,11 +4,9 @@
 #pragma comment(linker, "/export:VMGetVirtualKey=_VMGetVirtualKey@4")
 #pragma comment(linker, "/export:VMKeyDown=_VMKeyDown@12")
 #pragma comment(linker, "/export:VMKeyUp=_VMKeyUp@8")
-//#pragma comment(linker, "/export:VMMouseButtonUp=_VMMouseButtonUp@16")
 #pragma comment(linker, "/export:VMMouseDrag=_VMMouseDrag@8")
 #pragma comment(linker, "/export:VMMouseClick=_VMMouseClick@8")
 #pragma comment(linker, "/export:VMMouseMove=_VMMouseMove@4")
-//#pragma comment(linker, "/export:VMMouseEvent=_VMMouseEvent@16")
 #pragma comment(linker, "/export:VMVirtualKeyDown=_VMVirtualKeyDown@12")
 #pragma comment(linker, "/export:VMVirtualKeyUp=_VMVirtualKeyUp@8")
 
@@ -57,9 +55,8 @@ extern "C" {
 	
 	// マウスクリック
 	DLL_EXPORT void WINAPI VMMouseClick(const VMMouseMessage* mouseMessage, BOOL release);
-	DLL_EXPORT void WINAPI VMMouseMove(const VMMouseMessage* mouseMessage/*, int reduceCount*/);
+	DLL_EXPORT void WINAPI VMMouseMove(const VMMouseMessage* mouseMessage);
 	// マウスドラッグ
-	//DLL_EXPORT BOOL WINAPI VMMouseEvent(const VMMouseMessage* mouseMessage, int reduceCount, BOOL resetPostMessage, BOOL resetSendInput);
 	DLL_EXPORT BOOL WINAPI VMMouseDrag(const VMMouseMessage* mouseMessage, int reduceCount = 1);
 
 #ifdef __cplusplus
